@@ -30,10 +30,16 @@ class HomePage:
         self.avatar.click()
         self.logout_btn.wait_for(state="visible", timeout=5000)
 
+    def click_nav_item(self, name: str):
+        """點擊主導覽列項目（真人 / 電子 / 捕魚 等）"""
+        self.page.locator(f"text={name}").first.click()
+
     def logout(self):
         """點擊頭像 → 選擇登出 → 驗證登出成功"""
         dismiss_server_error_if_present(self.page)
         self.open_user_dropdown()
+        # 下拉選單開啟後可能再次出現伺服器錯誤彈窗
+        dismiss_server_error_if_present(self.page)
         self.logout_btn.click()
         # 驗證登出成功：右上角出現「登入」按鈕
         expect(self.login_btn).to_be_visible(timeout=5000)

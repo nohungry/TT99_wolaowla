@@ -45,7 +45,8 @@ class LoginPage:
     def _handle_user_agreement(self):
         """處理用戶協議彈窗（若出現則點確定）"""
         try:
-            agreement_btn = self.page.locator("button", has_text="確定")
+            # 排除 toast-confirm-btn，避免誤關錯誤提示彈窗
+            agreement_btn = self.page.locator("button:not(.toast-confirm-btn)", has_text="確定")
             agreement_btn.wait_for(state="visible", timeout=3000)
             agreement_btn.click()
         except Exception:

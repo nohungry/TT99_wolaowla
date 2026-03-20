@@ -5,12 +5,45 @@ pytest 全域設定
 - 每個測試結束後自動登出
 """
 
+import os
 import time
 import pytest
-from playwright.sync_api import Page
+from playwright.sync_api import Page, Playwright
 from config.settings import get_site_config
 from pages.login_page import LoginPage
 from pages.home_page import HomePage
+
+@pytest.fixture(scope="session")
+def browser(playwright: Playwright):
+    """透過 CDP 連接已開啟的 Windows Chrome（CDP_URL 從 .env 讀取）"""
+    cdp_url = os.getenv("CDP_URL", "http://localhost:9222")
+    browser = playwright.chromium.connect_over_cdp(cdp_url)
+    yield browser
+    # 不關閉 browser，避免把 Windows Chrome 一起關掉
+
+
+@pytest.fixture(scope="function")
+def page(browser):
+    """每個測試建立獨立 context，視窗最大化"""
+    context = browser.new_context(no_viewport=True)
+    page = context.new_page()
+    # 透過 CDP 指令將視窗最大化
+    cdp = context.new_cdp_session(page)
+    window_id = cdp.send("Browser.getWindowForTarget")["windowId"]
+    cdp.send("Browser.setWindowBounds", {
+        "windowId": window_id,
+        "bounds": {"windowState": "maximized"},
+    })
+    cdp.detach()
+    # 注入 MutationObserver：偵測到「伺服器錯誤」彈窗時自動點確定
+    page.add_init_script("""
+        new MutationObserver(() => {
+            const btn = document.querySelector('button.toast-confirm-btn');
+            if (btn && btn.offsetParent !== null) btn.click();
+        }).observe(document.body, { childList: true, subtree: true });
+    """)
+    yield page
+    context.close()
 
 
 # -----------------------------------------------
