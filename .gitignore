@@ -13,3 +13,6 @@ __pycache__/
 # Reports
 reports/*.html
 reports/*.xml
+
+# VS Code (machine-specific settings)
+.vscode/
