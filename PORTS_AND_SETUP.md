@@ -4,13 +4,7 @@
 
 WSL 無法直接用 `localhost` 連到 Windows，所以用 `netsh portproxy` 把流量從 WSL 虛擬網卡轉發到 Windows 本機。
 
-### 目前已設定的轉發規則
-```
-172.29.96.1:9222  →  127.0.0.1:9222
-```
-WSL 連到 `172.29.96.1:9222`，Windows 自動轉發到 `127.0.0.1:9222`（本機 Chrome）。
-
-> **注意：** `netstat` 查到 `172.29.96.1:9222` 是 `svchost` 在監聽，這是正常現象——
+> **注意：** `netstat` 查到 `<WINDOWS_HOST_IP>:<PORT>` 是 `svchost` 在監聽，這是正常現象——
 > svchost 是 Windows Port Proxy 服務本身，負責接收並轉發流量，不是其他系統服務佔用。
 
 ### 查詢現有轉發規則
@@ -21,30 +15,29 @@ netsh interface portproxy show all
 ### 新增轉發規則
 ```powershell
 # 格式：將 WSL虛擬網卡IP:PORT 轉發到 Windows本機:PORT
-netsh interface portproxy add v4tov4 listenaddress=172.29.96.1 listenport=<PORT> connectaddress=127.0.0.1 connectport=<PORT>
+netsh interface portproxy add v4tov4 listenaddress=<WINDOWS_HOST_IP> listenport=<PORT> connectaddress=127.0.0.1 connectport=<PORT>
 
 # 範例：新增 9223 轉發（pytest 用）
-netsh interface portproxy add v4tov4 listenaddress=172.29.96.1 listenport=9223 connectaddress=127.0.0.1 connectport=9223
+netsh interface portproxy add v4tov4 listenaddress=<WINDOWS_HOST_IP> listenport=9223 connectaddress=127.0.0.1 connectport=9223
 
 # 範例：新增 9224 轉發（MCP 用）
-netsh interface portproxy add v4tov4 listenaddress=172.29.96.1 listenport=9224 connectaddress=127.0.0.1 connectport=9224
+netsh interface portproxy add v4tov4 listenaddress=<WINDOWS_HOST_IP> listenport=9224 connectaddress=127.0.0.1 connectport=9224
 ```
 > 需以**系統管理員身份**執行 PowerShell。
 
 ### 刪除轉發規則
 ```powershell
-netsh interface portproxy delete v4tov4 listenaddress=172.29.96.1 listenport=<PORT>
+netsh interface portproxy delete v4tov4 listenaddress=<WINDOWS_HOST_IP> listenport=<PORT>
 ```
 
 ---
 
 ## Port 分工
 
-| Port | 用途 | 原因 |
-|------|------|------|
-| **9222** | MCP chrome-devtools（舊設定） | 已有 portproxy 轉發 172.29.96.1:9222 → 127.0.0.1:9222 |
-| **9223** | pytest 自動化測試（WSL 模式） | 需另外新增 portproxy 轉發規則 |
-| **9224** | Claude Code + chrome-devtools MCP（新設定） | 需另外新增 portproxy 轉發規則 |
+| Port | 用途 |
+|------|------|
+| **9223** | pytest 自動化測試（WSL 模式） |
+| **9224** | Claude Code + chrome-devtools MCP |
 
 ---
 
@@ -83,7 +76,7 @@ netstat -ano | findstr :9224
         "-y",
         "chrome-devtools-mcp@latest",
         "--slim",
-        "--browser-url=http://172.29.96.1:9224"
+        "--browser-url=http://<WINDOWS_HOST_IP>:9224"
       ]
     }
   }
@@ -99,7 +92,7 @@ netstat -ano | findstr :9224
 
 ### 執行方式
 ```powershell
-cd C:\TT99_wolaowla
+cd <PROJECT_PATH>
 pytest
 ```
 
@@ -120,7 +113,7 @@ HEADLESS=false    # false = 顯示瀏覽器視窗，true = 背景執行
 
 ### 執行方式
 ```bash
-cd /mnt/c/TT99_wolaowla
+cd ~/projects/auto-regression
 pytest
 ```
 
@@ -131,11 +124,11 @@ pytest
 
 ### .env 相關設定
 ```
-CDP_URL=http://172.29.96.1:9223
+CDP_URL=http://<WINDOWS_HOST_IP>:9223
 ```
 
-**為什麼用 `172.29.96.1`？**
-WSL 無法用 `localhost` 連到 Windows，需要使用 Windows 主機在 WSL 虛擬網卡上的 IP。
+**為什麼不用 `localhost`？**
+WSL 無法用 `localhost` 連到 Windows，需要使用 Windows 主機在 WSL 虛擬網卡上的 IP（即 `<WINDOWS_HOST_IP>`）。
 
 查詢 Windows host IP：
 ```bash
@@ -144,14 +137,52 @@ cat /etc/resolv.conf | grep nameserver
 
 ---
 
+### 除錯：若 Chrome 啟動超時
+
+若出現 `RuntimeError: Chrome 啟動超時` 請依序確認：
+
+**Step 1：確認 port proxy 規則存在（PowerShell）**
+```powershell
+netsh interface portproxy show all
+```
+確認有 `<WINDOWS_HOST_IP>:9223 → 127.0.0.1:9223` 這條規則，沒有則新增：
+```powershell
+netsh interface portproxy add v4tov4 listenaddress=<WINDOWS_HOST_IP> listenport=9223 connectaddress=127.0.0.1 connectport=9223
+```
+
+**Step 2：手動啟動 Chrome（PowerShell）**
+```powershell
+& "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9223 --remote-debugging-address=0.0.0.0 --user-data-dir="C:\temp\chrome-cdp-debug"
+```
+
+**Step 3：確認 Chrome 已在監聽（PowerShell）**
+```powershell
+netstat -ano | findstr :9223
+```
+應看到 `0.0.0.0:9223` 或 `127.0.0.1:9223` 的 LISTENING。
+
+**Step 4：在 WSL 測試連線**
+```bash
+curl http://<WINDOWS_HOST_IP>:9223/json/version
+```
+有 JSON 回應即代表 port proxy 正常，再執行 `pytest`。
+
+**Step 5：若 curl 仍然 timeout — 新增防火牆規則（PowerShell，系統管理員）**
+```powershell
+New-NetFirewallRule -DisplayName "WSL CDP 9223" -Direction Inbound -Protocol TCP -LocalPort 9223 -Action Allow
+```
+新增後重新執行 Step 4 確認連線，有回應即可執行 `pytest`。
+
+---
+
 ## .env 完整範例
 
 ```
-DEFAULT_SITE=wlj
+DEFAULT_SITE=drc
 HEADLESS=false
-CDP_URL=http://172.29.96.1:9223
+CDP_URL=http://<WINDOWS_HOST_IP>:9223
 
-SITE_WLJ_URL=https://dev-drc.t9platform-ph.com/
-SITE_WLJ_USERNAME=your_username
-SITE_WLJ_PASSWORD=your_password
+SITE_DRC_URL=https://your-site-url.com/
+SITE_DRC_USERNAME=your_username
+SITE_DRC_PASSWORD=your_password
 ```
