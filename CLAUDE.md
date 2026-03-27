@@ -25,10 +25,12 @@ Key `.env` variables:
 
 ```bash
 .venv/bin/pytest                                                        # all tests
-.venv/bin/pytest --site=drc                                             # specific site
+.venv/bin/pytest tests/drc/                                             # drc site only (no --site needed)
+.venv/bin/pytest tests/dlt/                                             # dlt site only (no --site needed)
+.venv/bin/pytest tests/dlt/test_p0_smoke.py -m p0                         # dlt p0 smoke tests
 .venv/bin/pytest -m p0                                                  # by marker
 .venv/bin/pytest -m login                                               # by marker
-.venv/bin/pytest tests/test_p0_smoke.py::TestLogin::test_login_success  # single test
+.venv/bin/pytest tests/drc/test_p0_smoke.py::TestLogin::test_login_success # single test
 ```
 
 Reports are written to `reports/report.html` (self-contained HTML).
@@ -40,15 +42,21 @@ Reports are written to `reports/report.html` (self-contained HTML).
 | Smoke | `page` / `logged_in_page` | function | 每次測試獨立 context，測試後自動登出。驗證核心流程（登入/登出）。 |
 | Functional | `class_logged_in_page` + `go_home` | class | 一個 class 只登入一次，測試間共用 session，`go_home` 每個測試前回首頁。適合功能驗證。 |
 
-Smoke 測試放在 `test_p0_smoke.py`；功能型測試放在 `test_functional.py`（或依功能拆分 `test_<feature>.py`）。
+各站點測試放在 `tests/<site_id>/` 下；smoke 測試統一命名 `test_p0_smoke.py`，功能型測試用 `test_functional.py`（或依功能拆分）。
 
 ## Architecture
 
 ```
 conftest.py              — browser setup, environment detection (Windows/WSL/Linux), global fixtures
 config/settings.py       — multi-site SiteConfig dataclass loaded from .env
-pages/                   — Page Object Model: LoginPage, HomePage
-tests/                   — test classes (TC-001 to TC-022 in test_p0_smoke.py)
+pages/factory.py         — routes site_id → correct LoginPage/HomePage class
+pages/drc/               — drc site Page Objects (LoginPage, HomePage)
+pages/dlt/               — dlt site Page Objects (LoginPage, HomePage)
+tests/drc/               — drc site tests (test_p0_smoke.py p0, test_functional.py p1/p2)
+tests/drc/conftest.py    — drc-specific overrides: site_config=drc
+tests/dlt/               — dlt site tests (test_p0_smoke.py p0, test_functional.py p1/p2)
+tests/dlt/conftest.py    — dlt-specific overrides: site_config=dlt, page fixture without MutationObserver
+utils/locale_helper.py   — set_locale(): injects i18n_redirected_lt cookie for lt site
 utils/dialog_helper.py   — helpers: dismiss server error popups, wait for loading animation
 utils/screenshot_helper.py — element-highlight screenshot system, auto README.md generation
 screenshots/             — per-test screenshot folders (auto-generated, in .gitignore)
@@ -134,6 +142,32 @@ el = page.locator("text=T9真人").first
 
 # Correct — targets visible content card
 el = page.locator("p:not(.text-black)", has_text="T9真人").first
+```
+
+### Exception — lt 站 Drawer 按鈕（登出）Outside Viewport
+
+The lt site's member drawer renders its buttons (登出) outside the viewport. `scroll_into_view_if_needed()` + `click()` will always fail with "Element is outside of the viewport". Use `dispatch_event("click")` instead:
+
+```python
+# Correct for lt drawer buttons (e.g., logout)
+self.logout_btn.wait_for(state="visible", timeout=5000)
+self.logout_btn.dispatch_event("click")
+
+# Wrong — will throw "Element is outside of the viewport"
+self.logout_btn.scroll_into_view_if_needed()
+self.logout_btn.click()
+```
+
+### Exception — lt 站 SPA Login Form: Must Wait for networkidle
+
+The lt site uses React (SPA). If form inputs are filled before the page reaches `networkidle`, the login succeeds at API level (cookie is set) but the SPA does **not** navigate away from `/login`. Always use `wait_until="networkidle"` when going to `/login`:
+
+```python
+# Correct
+self.page.goto(self.login_url, wait_until="networkidle")
+
+# Wrong — form may not be fully initialized; SPA won't redirect after submit
+self.page.goto(self.login_url, wait_until="domcontentloaded")
 ```
 
 ### Exception Handling

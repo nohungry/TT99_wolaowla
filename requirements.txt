@@ -1,5 +1,6 @@
 pytest
 pytest-playwright
+pytest-playwright-snapshot
 pytest-html
 pytest-base-url
 pytest-metadata
@@ -8,3 +9,5 @@ playwright
 pygments
 python-slugify
 requests
+Pillow
+pixelmatch

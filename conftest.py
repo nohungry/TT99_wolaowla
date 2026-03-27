@@ -24,8 +24,7 @@ import pytest
 from urllib.parse import urlparse
 from playwright.sync_api import Page, Playwright
 from config.settings import get_site_config
-from pages.login_page import LoginPage
-from pages.home_page import HomePage
+from pages.factory import get_login_page_class, get_home_page_class
 from utils.dialog_helper import dismiss_server_error_if_present
 from utils.screenshot_helper import (
     ScreenshotHelper, attach_screenshotter, detach_screenshotter
@@ -173,6 +172,7 @@ def page(browser):
 @pytest.fixture(scope="function")
 def login_page(page: Page, site_config):
     """提供 LoginPage 實例"""
+    LoginPage = get_login_page_class(site_config.site_id)
     return LoginPage(page, site_config.url)
 
 
@@ -182,6 +182,9 @@ def logged_in_page(page: Page, site_config):
     [Smoke 用] 已登入狀態的 fixture，每個測試獨立 context。
     測試需要登入後才能執行的功能時使用這個。
     """
+    LoginPage = get_login_page_class(site_config.site_id)
+    HomePage = get_home_page_class(site_config.site_id)
+
     login = LoginPage(page, site_config.url)
     login.goto_and_login(site_config.username, site_config.password)
 
@@ -201,6 +204,9 @@ def class_logged_in_page(browser, site_config):
 
     搭配 go_home fixture 使用，可在每個測試前回到首頁。
     """
+    LoginPage = get_login_page_class(site_config.site_id)
+    HomePage = get_home_page_class(site_config.site_id)
+
     context, pg = _new_configured_page(browser)
 
     login = LoginPage(pg, site_config.url)
@@ -286,8 +292,10 @@ def auto_logout_after_test(request):
         return  # 使用 class_logged_in_page 的測試略過，不登出
     try:
         pg = request.getfixturevalue('page')
+        sc = request.getfixturevalue('site_config')
+        HomePage = get_home_page_class(sc.site_id)
         home = HomePage(pg)
-        if home.avatar.is_visible(timeout=5000):
+        if home.is_logged_in():
             home.logout()
     except Exception:
         pass  # 未登入或已登出，略過

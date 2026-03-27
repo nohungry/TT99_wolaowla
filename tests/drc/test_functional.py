@@ -5,14 +5,14 @@
 - 不測試登入/登出流程本身（那是 Smoke test 的範疇）
 
 執行方式：
-    .venv/bin/pytest tests/test_functional.py -v
-    .venv/bin/pytest tests/test_functional.py -v -k "TestWallet"
+    .venv/bin/pytest tests/drc/test_functional.py -v
+    .venv/bin/pytest tests/drc/test_functional.py -v -k "TestWallet"
 """
 
 import re
 import pytest
 from playwright.sync_api import Page, expect
-from pages.home_page import HomePage
+from pages.drc.home_page import HomePage
 
 
 @pytest.mark.p1

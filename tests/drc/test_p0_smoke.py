@@ -6,8 +6,8 @@ P0 Smoke Test
 import re
 import pytest
 from playwright.sync_api import Page, expect
-from pages.login_page import LoginPage
-from pages.home_page import HomePage
+from pages.drc.login_page import LoginPage
+from pages.drc.home_page import HomePage
 from utils.dialog_helper import wait_loading_if_present
 from utils.screenshot_helper import get_screenshotter
 

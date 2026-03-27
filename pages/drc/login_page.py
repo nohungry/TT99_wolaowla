@@ -1,5 +1,5 @@
 """
-登入頁面 Page Object
+登入頁面 Page Object — drc 站點
 Selector 來源：Chrome DevTools MCP 探索 dev-drc.t9platform-ph.com
 """
 

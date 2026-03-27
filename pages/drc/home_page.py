@@ -1,5 +1,5 @@
 """
-首頁 Page Object
+首頁 Page Object — drc 站點
 登入成功後的首頁驗證與登出
 """
 
@@ -17,6 +17,13 @@ class HomePage:
         self.avatar     = page.locator('img[alt="avatar"]')
         self.logout_btn = page.locator('button', has_text="登出")
         self.login_btn  = page.locator('button', has_text="登入")
+
+    def is_logged_in(self) -> bool:
+        """判斷目前是否已登入（avatar 可見）"""
+        try:
+            return self.avatar.is_visible(timeout=3000)
+        except Exception:
+            return False
 
     def verify_login_success(self, username: str):
         """驗證登入成功：右上角應顯示帳號名稱"""
