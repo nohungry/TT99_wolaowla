@@ -47,19 +47,21 @@ Reports are written to `reports/report.html` (self-contained HTML).
 ## Architecture
 
 ```
-conftest.py              — browser setup, environment detection (Windows/WSL/Linux), global fixtures
-config/settings.py       — multi-site SiteConfig dataclass loaded from .env
-pages/factory.py         — routes site_id → correct LoginPage/HomePage class
-pages/drc/               — drc site Page Objects (LoginPage, HomePage)
-pages/dlt/               — dlt site Page Objects (LoginPage, HomePage)
-tests/drc/               — drc site tests (test_p0_smoke.py p0, test_functional.py p1/p2)
-tests/drc/conftest.py    — drc-specific overrides: site_config=drc
-tests/dlt/               — dlt site tests (test_p0_smoke.py p0, test_functional.py p1/p2)
-tests/dlt/conftest.py    — dlt-specific overrides: site_config=dlt, page fixture without MutationObserver
-utils/locale_helper.py   — set_locale(): injects i18n_redirected_lt cookie for lt site
-utils/dialog_helper.py   — helpers: dismiss server error popups, wait for loading animation
-utils/screenshot_helper.py — element-highlight screenshot system, auto README.md generation
-screenshots/             — per-test screenshot folders (auto-generated, in .gitignore)
+conftest.py                  — browser setup, environment detection (Windows/WSL/Linux), global fixtures
+config/settings.py           — multi-site SiteConfig dataclass loaded from .env
+pages/factory.py             — routes site_id → correct LoginPage/HomePage class
+pages/drc/                   — drc site Page Objects (LoginPage, HomePage)
+pages/dlt/                   — dlt site Page Objects (LoginPage, HomePage)
+tests/drc/                   — drc site tests (test_p0_smoke.py p0, test_functional.py p1/p2)
+tests/drc/conftest.py        — drc-specific overrides: site_config=drc
+tests/dlt/                   — dlt site tests (test_p0_smoke.py p0, test_functional.py p1/p2, test_locale_visual_matrix.py p2)
+tests/dlt/conftest.py        — dlt-specific overrides: site_config=dlt, page fixture without MutationObserver
+tests/dlt/__snapshots__/     — Visual Regression baseline PNGs (pytest-playwright-snapshot)
+utils/locale_helper.py       — set_locale(): injects i18n_redirected_lt cookie for lt site
+utils/dialog_helper.py       — helpers: dismiss server error popups, wait for loading animation
+utils/screenshot_helper.py   — element-highlight screenshot system, auto README.md generation
+screenshots/                 — per-test screenshot folders (auto-generated, in .gitignore)
+screenshots/vr_reference/    — home_shell / member_menu archive screenshots (no comparison, for manual review)
 ```
 
 **Environment detection** in `conftest.py`: detects WSL vs Windows vs Linux, auto-starts Windows Chrome over CDP if needed, injects a MutationObserver to auto-close server error popups.
@@ -73,7 +75,27 @@ screenshots/             — per-test screenshot folders (auto-generated, in .gi
 - `auto_screenshot` (autouse) — attaches `ScreenshotHelper` to page; generates `screenshots/<test_name>/README.md` after each test
 - `auto_logout_after_test` (autouse) — logs out after each smoke test (`page` fixture only)
 
-**Markers** (pytest.ini): `p0`, `p1`, `p2`, `login`, `home`
+**Markers** (pytest.ini): `p0`, `p1`, `p2`, `login`, `home`, `visual_regression`, `locale_visual`, `dlt`
+
+## Visual Regression (dlt site)
+
+Uses `pytest-playwright-snapshot` (not `expect(page).to_have_screenshot()` which is JS-only).
+
+**Building / updating baselines:**
+```bash
+.venv/bin/pytest tests/dlt/test_functional.py -m visual_regression --update-snapshots
+.venv/bin/pytest tests/dlt/test_locale_visual_matrix.py --update-snapshots
+```
+
+**Comparing against baselines:**
+```bash
+.venv/bin/pytest tests/dlt/test_functional.py -m visual_regression
+.venv/bin/pytest tests/dlt/test_locale_visual_matrix.py
+```
+
+**Dynamic content masking** — `_screenshot_with_mask()` hides banner images, game thumbnails, and the announcement bar before screenshotting, then restores them. Also stops Swiper carousel autoplay and resets to slide 0 for consistency.
+
+**home_shell and member_menu** — These tests contain live dynamic content (announcement ticker, hot games list) that changes too frequently for pixel-perfect comparison. They use `_save_screenshot()` instead: screenshots are saved to `screenshots/vr_reference/` for manual review but no assertion is made.
 
 ## Screenshot System
 
@@ -157,6 +179,23 @@ self.logout_btn.dispatch_event("click")
 self.logout_btn.scroll_into_view_if_needed()
 self.logout_btn.click()
 ```
+
+### Exception — dlt 站 Login Form: Locale-agnostic Selectors
+
+The dlt login form's placeholder text and button label change with locale. Always use CSS-based selectors instead of text-based ones:
+
+```python
+# Correct — works for all 5 locales (tw/cn/en/th/vn)
+self.username_input = page.locator("input.input-style").nth(0)
+self.password_input = page.locator("input.input-style").nth(1)
+self.login_btn      = page.locator("button").first   # property, NOT method call
+
+# Wrong — only works for tw locale
+self.username_input = page.get_by_placeholder("請填寫4-10位的字母或數字")
+self.login_btn      = page.get_by_role("button", name="登入")
+```
+
+Note: `.last` and `.first` in Python Playwright are **properties**, not methods. Do NOT call them as `.last()` or `.first()`.
 
 ### Exception — lt 站 SPA Login Form: Must Wait for networkidle
 
