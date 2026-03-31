@@ -71,7 +71,8 @@ class ScreenshotHelper:
 
     def __init__(self, page: Page, test_name: str, description: str = ""):
         self.page = page
-        self.folder = SCREENSHOTS_DIR / _sanitize(test_name)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+        self.folder = SCREENSHOTS_DIR / f"{_sanitize(test_name)}_{timestamp}"
         self.folder.mkdir(parents=True, exist_ok=True)
         self._test_name = test_name
         self._description = description.strip()
